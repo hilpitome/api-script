@@ -26,12 +26,18 @@ public class Utils {
 
     public static String lmpGestationalAge(String lmpDateString, String manualEncounterDateString){
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
-        LocalDate lmpDate = LocalDate.parse(lmpDateString, formatter);
-        LocalDate manualEncounterDate = LocalDate.parse(manualEncounterDateString, formatter);
+        LocalDate lmpDate = null;
+        LocalDate manualEncounterDate = null;
+        try {
+            lmpDate = LocalDate.parse(lmpDateString, formatter);
+            manualEncounterDate = LocalDate.parse(manualEncounterDateString, formatter);
+        } catch (DateTimeParseException e){
+            e.printStackTrace();
+        }
         long daysBetween = ChronoUnit.DAYS.between(lmpDate, manualEncounterDate);
         long weeks = daysBetween/7;
         long days = daysBetween % 7;
-        return weeks+ "weeks "+days+" days";
+        return weeks+ " weeks "+days+" days";
     }
 
 }
