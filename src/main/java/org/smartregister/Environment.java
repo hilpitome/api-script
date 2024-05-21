@@ -22,6 +22,7 @@ public class Environment {
     private String keycloakUrl;
     private String opensrpUrl;
     private String realm;
+    private String tokenUrl;
 
     public Environment(){
         Properties properties = new Properties();
@@ -38,6 +39,7 @@ public class Environment {
             keycloakUrl = properties.getProperty("KEYCLOAK_URL");
             opensrpUrl = properties.getProperty("OPENSRP_URL");
             realm = properties.getProperty("REALM");
+            tokenUrl = properties.getProperty("TOKEN_URL");
 
         } catch (IOException e) {
             e.printStackTrace();

@@ -54,7 +54,7 @@ public class App
         RequestBody body = RequestBody.create(formBody, MediaType.get("application/x-www-form-urlencoded"));
 
         Request request = new Request.Builder()
-                .url("https://anckeycloak-stage.ths.rw/auth/realms/who-anc-stage-docker/protocol/openid-connect/token")
+                .url(env.getTokenUrl())
                 .post(body)
                 .addHeader("Content-Type", "application/x-www-form-urlencoded")
                 .build();
