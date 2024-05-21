@@ -74,7 +74,7 @@ public class App
         }
         do {
 
-                String url = HttpUrl.parse("https://ancopensrp-stage.ths.rw/rest/event/sync")
+                String url = HttpUrl.parse(env.getOpensrpUrl()+"/rest/event/sync")
                         .newBuilder()
                         .addQueryParameter("limit","250")
                         .addQueryParameter("teamId", "f2c988ff-8a0c-4cf8-91ad-7dadf01d2b93")
@@ -248,10 +248,6 @@ public class App
                     }
 
 
-                } catch (JsonMappingException e) {
-                    throw new RuntimeException(e);
-                } catch (JsonParseException e) {
-                    throw new RuntimeException(e);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -275,7 +271,7 @@ public class App
             wrapper.setEvents(chunk);
 
 
-            String url = HttpUrl.parse("https://ancopensrp-stage.ths.rw/rest/event/add")
+            String url = HttpUrl.parse(env.getOpensrpUrl()+"/rest/event/add")
                     .newBuilder()
                     .addQueryParameter("access_token", authResponse.getAccessToken())
                     .build()
