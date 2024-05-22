@@ -17,12 +17,11 @@ import java.util.Properties;
 public class Environment {
     private String clientId;
     private String clientSecret;
-    private String username;
-    private String password;
     private String keycloakUrl;
     private String opensrpUrl;
     private String realm;
     private String tokenUrl;
+    private String csvFilePath;
 
     public Environment(){
         Properties properties = new Properties();
@@ -34,12 +33,11 @@ public class Environment {
             // Read a specific key-value pair
             clientId = properties.getProperty("CLIENT_ID");
             clientSecret = properties.getProperty("CLIENT_SECRET");
-            username = properties.getProperty("OPENSRP_RW_USERNAME");
-            password = properties.getProperty("OPENSRP_RW_PASSWORD");
             keycloakUrl = properties.getProperty("KEYCLOAK_URL");
             opensrpUrl = properties.getProperty("OPENSRP_URL");
             realm = properties.getProperty("REALM");
             tokenUrl = properties.getProperty("TOKEN_URL");
+            csvFilePath = properties.getProperty("USER_CREDENTIALS_FILE");
 
         } catch (IOException e) {
             e.printStackTrace();
