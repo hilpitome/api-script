@@ -189,79 +189,56 @@ public class App {
                                 profileEvent.getObs().forEach(obs -> {
                                     if (Objects.equals(obs.getFormSubmissionField(), "lmp_known_date")) {
                                         lmpDateString[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found lmpDateString " + lmpDateString[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found lmp_known_date " + lmpDateString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "lmp_known")) {
                                         lmpDone[0] = (String) obs.getHumanReadableValues().get(0);
-                                        logger.debug("found lmpDone " + lmpDone[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found lmp_known " + lmpDone[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_done")) {
                                         ultrasoundDone[0] = (String) obs.getHumanReadableValues().get(0);
-                                        logger.debug("found ultrasoundDone " + ultrasoundDone[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found ultrasound_done " + ultrasoundDone[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_done_date")) {
                                         ultrasoundDateString[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found ultrasoundDateString " + ultrasoundDateString[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found ultrasound_done_date " + ultrasoundDateString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_gest_age_wks")) {
                                         ultrasoundWeeks[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found ultrasoundWeeks " + ultrasoundWeeks[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found ultrasound_gest_age_wks " + ultrasoundWeeks[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_gest_age_days")) {
                                         ultrasoundDays[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found ultrasoundDays " + ultrasoundDays[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found ultrasound_gest_age_days " + ultrasoundDays[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                 });
 
                                 // if lmpDone gestationalAge
                                 if (lmpDone[0] != null && !lmpDone[0].isEmpty() && lmpDone[0].equals("yes") && !lmpDateString[0].equals("0")) {
                                     String lmpGestationalAge = Utils.lmpGestationalAge(lmpDateString[0], manualEncounterDate[0]);
-                                    /*
-                                     create lmp_edd obs e.g
-                                      {
-                                            "fieldCode": "lmp_gest_age",
-                                            "fieldDataType": "text",
-                                            "fieldType": "formsubmissionField",
-                                            "formSubmissionField": "lmp_gest_age",
-                                            "humanReadableValues": [],
-                                            "parentCode": "",
-                                            "saveObsAsArray": false,
-                                            "set": [],
-                                            "values": [
-                                                "37 weeks 3 days"
-                                            ]
-                                        }
-                                    */
 
-                                    Obs ob = createOb(lmpGestationalAge, "lmp_gest_age");
-                                    addEventObs(profileEvent, ob);
+                                    if(!lmpGestationalAge.equals("0")){
+                                        Obs ob = createOb(lmpGestationalAge, "lmp_gest_age");
+                                        addEventObs(profileEvent, ob);
 
-                                    logger.debug("added lmp_gest_age obs " + ob + " to Profile Event");
+                                        logger.debug("added lmp_gest_age obs " + ob + " to Profile Event");
+                                    } else logger.error("found null value in user "+user.getUsername()+" while calculating lmpGestationalAge for profileEvent with baseEntityId "+profileEvent.getBaseEntityId()
+                                            +", lmpString value =  "+lmpDateString[0]+" manualEncounterDate "+manualEncounterDate[0]);
                                 }
                                 if (ultrasoundDone[0] != null && !ultrasoundDateString[0].equals("0")) {
                                     if (ultrasoundDays[0] != null && ultrasoundWeeks[0] != null) {
                                         String ultrasoundEdd = Utils.calculateEddUltrasound(ultrasoundDateString[0], ultrasoundWeeks[0], ultrasoundDays[0]);
-                                    /*
-                                    *       {
-                                            "fieldCode": "ultrasound_edd",
-                                            "fieldDataType": "text",
-                                            "fieldType": "formsubmissionField",
-                                            "formSubmissionField": "ultrasound_edd",
-                                            "humanReadableValues": [],
-                                            "parentCode": "",
-                                            "saveObsAsArray": false,
-                                            "set": [],
-                                            "values": [
-                                                "0"
-                                            ]
-                                        }
-                                        * */
 
+                                       if(!ultrasoundEdd.equals("0")){
+                                            Obs ob = createOb(ultrasoundEdd, "ultrasound_edd");
+                                            addEventObs(profileEvent, ob);
 
-                                        Obs ob = createOb(ultrasoundEdd, "ultrasound_edd");
-                                        addEventObs(profileEvent, ob);
+                                            logger.debug(user.getUsername()+" has a added ultrasound_edd obs " + ob + " to Profile Event");
+                                        } else logger.error("found null value in user " +user.getUsername()+"w hile calculating calculateEddUltrasound for profileEvent with baseEntityId "+baseEntityId+", " +
+                                               "ultrasound_done_date value = "+ultrasoundDateString[0] +", ultrasound_gest_age_wks "+ultrasoundWeeks[0]+
+                                               ", ultrasound_gest_age_days "+ manualEncounterDate[0]
+                                       );
 
-                                        logger.debug("added ultrasound_edd obs " + ob + " to Profile Event");
                                     }
                                     logger.debug("added profile event with baseEntityId " + baseEntityId);
                                     eventsToPost.add(profileEvent);
@@ -287,8 +264,8 @@ public class App {
             } while (count > 0);
 
 
-            // Define the chunk size
-            int chunkSize = 250;
+            // Define the chunk size. Too large a size, and we get an error code 413 i.e content too large as per the server
+            int chunkSize = 50;
             logger.debug("Posting " + eventsToPost.size() + " events");
 
             // Loop through the ArrayList in chunks
