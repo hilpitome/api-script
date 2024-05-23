@@ -18,13 +18,16 @@ public class Utils {
             LocalDate ultrasoundDateEddDate = LocalDate.parse(ultrasoundDateEddDateString, formatter);
             LocalDate manualEncounterDate = LocalDate.parse(manualEncounterDateString, formatter);
 
-            return String.valueOf(280 - ChronoUnit.DAYS.between(ultrasoundDateEddDate, manualEncounterDate));
+            long daysBetween = 280 - ChronoUnit.DAYS.between(ultrasoundDateEddDate, manualEncounterDate);
+            long weeks = daysBetween / 7;
+            long days = daysBetween % 7;
+            return weeks + " weeks " + days + " days";
         }
         return "0";
     }
 
     // sfh_edd {today/manual encounter date} + (280 - {sfh_gest_age} * 7)
-    public static String calculateSfhEdd(String sfhGestationalAgeInWeeks, String manualEncounterDateString){
+    public static String calculateSfhEdd(String sfhGestationalAgeInWeeks, String manualEncounterDateString) {
         if (sfhGestationalAgeInWeeks != null && manualEncounterDateString != null) {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
             LocalDate manualEncounterDate = LocalDate.parse(manualEncounterDateString, formatter);

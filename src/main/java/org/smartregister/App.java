@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -13,7 +12,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Hello world!
@@ -24,11 +22,17 @@ public class App {
     public static void main(String[] args) {
         Environment env = new Environment();
         CSVReader csvReader = new CSVReader();
-        logger.info("reading  user credentials csv files");
+        logger.info("reading user credentials csv files");
         List<User> users = csvReader.readUsersFromCSV(env.getCsvFilePath());
 
         users.forEach(user -> {
-            logger.info("authenticating user with username " + user.getUsername());
+
+            System.out.println();
+            logger.info("============================================================");
+            logger.info("Processing data for user with username " + user.getUsername());
+            logger.info("============================================================");
+            System.out.println();
+
             // Convert AuthenticationBody to URL-encoded string
             String formBody = "scope=" + "openid"
                     + "&username=" + user.getUsername()
@@ -56,7 +60,8 @@ public class App {
             long lastServerVersion = 0;
             List<Event> eventsToPost = new ArrayList<>();
             AuthResponse authResponse = null;
-            try (Response response = client.newCall(request).execute();) {
+            logger.info("authenticating user with username " + user.getUsername());
+            try (Response response = client.newCall(request).execute()) {
 
                 // response from keycloak
                 // Deserialize the response body to AuthResponse
@@ -76,7 +81,11 @@ public class App {
                 try (Response openSRPAuthResponse = client.newCall(opensrpAuthRequest).execute()) {
                     OpenSRPAuthResponse opensrpAuth = objectMapper.readValue(openSRPAuthResponse.body().string(), OpenSRPAuthResponse.class);
                     user.setTeamId(opensrpAuth.getTeam().getInnerTeam().getUuid());
+                    logger.info("succesfully retrieved team id as " + user.getTeamId() + " for user " + user.getUsername());
+
                 } catch (IOException e) {
+
+                    logger.error("failed to get team id for user " + user.getUsername());
                     logger.error(e.getMessage(), e);
                 }
 
@@ -99,10 +108,9 @@ public class App {
                         .addHeader("Content-Type", "application/json")
                         .build();
 
-                logger.info("making event request number " + i);
+                logger.info("making event request number " + (i + 1));
                 try (Response response1 = client.newCall(request1).execute()) {
-                    System.out.println("\n");
-                    logger.info("getting response for event batch " + i);
+                    logger.info("getting response for event batch " + (i + 1));
                     i++;
                     EventWrapper eventWrapper = objectMapper.readValue(response1.body().bytes(), EventWrapper.class);
                     List<Event> events = eventWrapper.getEvents();
@@ -119,21 +127,18 @@ public class App {
                                         .anyMatch(obs -> "lst_visit_date".equals(obs.getFormSubmissionField())))
                                 .collect(Collectors.toList());
 
-                        logger.debug("Filtered " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatement events" +
-                                "with lst_visit_date");
+                        System.out.println();
+                        logger.debug("filtered " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatment events" +
+                                " with lst_visit_date");
 
                         HashMap<String, Event> counsellingAndTreatmentWithLstVisitDateMap = new HashMap<>();
                         counsellingAndTreatmentWithLstVisitDate
                                 .forEach(event -> counsellingAndTreatmentWithLstVisitDateMap
                                         .put(event.getBaseEntityId() + "-" + event.getDetails().get("contact_no"), event)
                                 );
-                        logger.debug("created hashmap of baseentityids-concactno for counselling and treatment events");
-
-
+                        logger.info("created hashmap of baseentityids-concactno for counselling and treatment events");
                         List<Event> filteredQuickCheckEvents = events.stream().filter(event -> "Quick Check".equals(event.getEventType()))
                                 .collect(Collectors.toList());
-
-                        System.out.println();
                         logger.debug("filtered " + filteredQuickCheckEvents.size() + " Quick Check events");
                         filteredQuickCheckEvents.forEach(quickCheckEvent -> {
                             String lookupKey = quickCheckEvent.getBaseEntityId() + "-" + quickCheckEvent.getDetails().get("contact_no");
@@ -177,12 +182,10 @@ public class App {
                                 String baseEntityId = profileEvent.getBaseEntityId();
                                 System.out.println();
                                 logger.debug("mutating Profile event for baseEntityId " + baseEntityId +
-                                        " with data from counselling and treatement event "
+                                        " with data from counselling and treatment event "
                                         + lookupKey);
 
-                                List<Obs> lastVisitDateObservationList = counsellingAndTreatmentEvent.getObs().stream().filter(obs -> Objects.equals(obs.getFormSubmissionField(), "lst_visit_date")).collect(Collectors.toList());
-                                List<Object> lastVisitDateObservationValuesList = !lastVisitDateObservationList.isEmpty() ? lastVisitDateObservationList.get(0).getValues() : new ArrayList<>();
-                                manualEncounterDate[0] = !lastVisitDateObservationValuesList.isEmpty() ? String.valueOf(lastVisitDateObservationValuesList.get(0)) : null;
+                                manualEncounterDate[0] = getObservationValueByFormSubmissionField(counsellingAndTreatmentEvent, "lst_visit_date");
 
                                 logger.debug(manualEncounterDate[0] == null ? "Not Found manual encounter date from counsellingAndTreatmentEvent lst_visit_date" : "Found manual encounter date " + manualEncounterDate[0] + " from counsellingAndTreatmentEvent lst_visit_date");
 
@@ -209,8 +212,11 @@ public class App {
                                     }
                                 });
 
+                                String selectedGaEddType = getObservationValueByFormSubmissionField(profileEvent, "select_gest_age_edd");
+
                                 // if lmpDone gestationalAge
                                 if (lmpDone[0] != null && lmpDone[0].equals("yes") && !lmpDateString[0].equals("0")) {
+
 
                                     String lmpGestationalAge = Utils.lmpGestationalAge(lmpDateString[0], manualEncounterDate[0]);
 
@@ -220,54 +226,68 @@ public class App {
 
                                         logger.debug("added lmp_gest_age obs " + ob + " to Profile Event");
 
+                                        if (GuestAgeEddEnum.LMP.equals(selectedGaEddType)) {
+                                            addGestationalAgeObservationToProfileEvent(profileEvent, lmpGestationalAge);
+                                            logger.debug("added gest_age obs based on select_gest_age_edd of LMP " + ob + " to Profile Event");
+                                        }
+
                                     } else
                                         logger.error("found null value in user " + user.getUsername() + " while calculating lmpGestationalAge for profileEvent with baseEntityId " + profileEvent.getBaseEntityId()
                                                 + ", lmpString value =  " + lmpDateString[0] + " manualEncounterDate " + manualEncounterDate[0]);
                                 }
+
+                                //if Ultrasound GA
                                 if (ultrasoundDone[0] != null && !ultrasoundDateString[0].equals("0")) {
 
-                                    String ultrasoundGestationalAge = Utils.calculateGaBasedOnUltrasoundEdd(ultrasoundDateString[0],manualEncounterDate[0]);
+                                    String ultrasoundGestationalAge = Utils.calculateGaBasedOnUltrasoundEdd(ultrasoundDateString[0], manualEncounterDate[0]);
 
                                     if (!ultrasoundGestationalAge.equals("0")) {
+
                                         Obs ob = createOb(ultrasoundGestationalAge, "ultrasound_gest_age");
                                         addEventObs(profileEvent, ob);
 
                                         logger.debug(user.getUsername() + " has a added ultrasound_gest_age obs " + ob + " to Profile Event");
+
+                                        if (GuestAgeEddEnum.ULTRASOUND.equals(selectedGaEddType)) {
+                                            addGestationalAgeObservationToProfileEvent(profileEvent, ultrasoundGestationalAge);
+                                            logger.debug("added gest_age obs based on select_gest_age_edd of Ultrasound " + ob + " to Profile Event");
+                                        }
+
+
                                     } else
                                         logger.error("found null value in user " + user.getUsername() + " while calculating ultrasoundGestationalAge for profileEvent with baseEntityId " + baseEntityId + ", " +
                                                 "ultrasound_done_date value = " + ultrasoundDateString[0] +
                                                 ", manual encounter date = " + manualEncounterDate[0]);
-                                    logger.debug("added profile event with baseEntityId " + baseEntityId);
-                                    eventsToPost.add(profileEvent);
-
 
                                 }
 
-                                if (sfhGaString[0] != null && !sfhGaString[0].trim().isEmpty() ) {
+                                //if SFH GA
+                                if (sfhGaString[0] != null && !sfhGaString[0].trim().isEmpty()) {
 
-                                    String sfhEdd = Utils.calculateSfhEdd(sfhGaString[0],manualEncounterDate[0]);
+                                    String sfhEdd = Utils.calculateSfhEdd(sfhGaString[0], manualEncounterDate[0]);
 
                                     if (!sfhEdd.equals("0")) {
                                         Obs ob = createOb(sfhEdd, "sfh_edd");
                                         addEventObs(profileEvent, ob);
 
                                         logger.debug(user.getUsername() + " has a added sfh_edd obs " + ob + " to Profile Event");
+
+
+                                        if (GuestAgeEddEnum.SFH.equals(selectedGaEddType)) {
+                                            addGestationalAgeObservationToProfileEvent(profileEvent, sfhGaString[0] + " weeks 0 days");
+                                            logger.debug("added gest_age obs based on select_gest_age_edd of SFH " + ob + " to Profile Event");
+                                        }
+
                                     } else
                                         logger.error("found null value in user " + user.getUsername() + " while calculating sfhEdd for profileEvent with baseEntityId " + baseEntityId + ", " +
                                                 "sfhEdd value = " + sfhGaString[0] +
                                                 ", manual encounter date = " + manualEncounterDate[0]);
-                                    logger.debug("added profile event with baseEntityId " + baseEntityId);
-                                    eventsToPost.add(profileEvent);
 
 
                                 }
-//                                List<Obs>  observation = counsellingAndTreatmentEvent.getObs().stream()
-//                                        .filter(obs -> "visit_date".equals(obs.getFormSubmissionField()))
-//                                        .collect(Collectors.toList());
-//                                if(!observation.isEmpty()){
-//                                    Obs newOb = observation.get(0);
-//                                    String manualEncounterDate = (String) newOb.getValues().get(0);
-//                                }
+
+                                eventsToPost.add(profileEvent);
+                                logger.debug("added profile event with baseEntityId " + baseEntityId);
 
                             }
                         });
@@ -284,8 +304,9 @@ public class App {
 
             // Define the chunk size. Too large a size, and we get an error code 413 i.e content too large as per the server
             int chunkSize = 50;
-            logger.debug("Posting " + eventsToPost.size() + " events");
+            logger.debug("Processing " + eventsToPost.size() + " events for user " + user.getUsername());
 
+            int chunkNo = 1;
             // Loop through the ArrayList in chunks
             for (int j = 0; j < eventsToPost.size(); j += chunkSize) {
                 // Calculate the end index of the current chunk
@@ -296,6 +317,7 @@ public class App {
                 EventWrapper wrapper = new EventWrapper();
                 wrapper.setEvents(chunk);
 
+                logger.debug("POSTing Chunk NO. " + chunkNo++ + " for " + user.getUsername());
 
                 String url = HttpUrl.parse(env.getOpensrpUrl() + "/rest/event/add")
                         .newBuilder()
@@ -327,9 +349,9 @@ public class App {
                         @Override
                         public void onResponse(Call call, Response response) throws IOException {
                             if (response.isSuccessful()) {
-                                logger.debug("Response: " + response.body().string());
+                                logger.debug("Asynchronous chunk POST complete: Response: " + response.body().string());
                             } else {
-                                logger.error("Post events failed with error code " + response.code());
+                                logger.error("Asynchronous chunk POST complete:Post events failed with error code " + response.code());
                             }
                         }
                     });
@@ -338,6 +360,10 @@ public class App {
 
         });
 
+        System.out.println();
+        logger.info("============================================================");
+        logger.debug("Script Execution Complete!! :D");
+        logger.info("============================================================");
     }
 
     /**
@@ -373,4 +399,27 @@ public class App {
         event.setObs(otherEventObs);
     }
 
+    interface GuestAgeEddEnum {
+        String ULTRASOUND = "ultrasound";
+        String SFH = "sfh";
+        String LMP = "lmp";
+    }
+
+    public static void addGestationalAgeObservationToProfileEvent(Event profileEvent, String humanReadableGestationalAge) {
+
+        Obs getAgeObservation = createOb(humanReadableGestationalAge, "gest_age");
+        addEventObs(profileEvent, getAgeObservation);
+
+        String lmpGestationalAgeWeeks = humanReadableGestationalAge.contains("weeks") ? humanReadableGestationalAge.substring(0, humanReadableGestationalAge.indexOf("weeks") - 1) : humanReadableGestationalAge;
+        Obs gestAgeOpenmrsObservation = createOb(lmpGestationalAgeWeeks, "gest_age_openmrs");
+        addEventObs(profileEvent, gestAgeOpenmrsObservation);
+
+    }
+
+    public static String getObservationValueByFormSubmissionField(Event event, String formSubmissionField) {
+        List<Obs> observationList = event.getObs().stream().filter(obs -> Objects.equals(obs.getFormSubmissionField(), formSubmissionField)).collect(Collectors.toList());
+        List<Object> observationValuesList = !observationList.isEmpty() ? observationList.get(0).getValues() : new ArrayList<>();
+        return !observationValuesList.isEmpty() ? String.valueOf(observationValuesList.get(0)) : null;
+
+    }
 }
