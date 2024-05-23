@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.ToString;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -235,5 +236,20 @@ public class Obs {
                 ", formSubmissionField='" + formSubmissionField + '\'' +
                 ", saveObsAsArray=" + saveObsAsArray +
                 '}';
+    }
+
+    @Override
+    public Obs clone() {
+        Obs obs = new Obs();
+        obs.fieldType = this.fieldType;
+        obs.fieldDataType = this.fieldDataType;
+        obs.fieldCode = this.fieldCode;
+        obs.parentCode = this.parentCode;
+        if(this.values!=null) obs.values = new ArrayList<>(this.values);
+        if(this.humanReadableValues!=null) obs.humanReadableValues = new ArrayList<>(this.humanReadableValues);
+        obs.comments = this.comments;
+        obs.formSubmissionField = this.formSubmissionField;
+        if(this.keyValPairs!=null) obs.keyValPairs = new HashMap<>(this.keyValPairs);
+        return obs;
     }
 }
