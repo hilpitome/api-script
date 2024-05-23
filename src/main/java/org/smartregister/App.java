@@ -100,7 +100,8 @@ public class App {
 
                 logger.info("making event request number " + i);
                 try (Response response1 = client.newCall(request1).execute()) {
-                    logger.info("\n\ngetting response for event batch " + i);
+                    System.out.println("\n");
+                    logger.info("getting response for event batch " + i);
                     i++;
                     EventWrapper eventWrapper = objectMapper.readValue(response1.body().bytes(), EventWrapper.class);
                     List<Event> events = eventWrapper.getEvents();
@@ -116,7 +117,9 @@ public class App {
                                 .filter(event -> event.getObs().stream()
                                         .anyMatch(obs -> "lst_visit_date".equals(obs.getFormSubmissionField())))
                                 .collect(Collectors.toList());
-                        logger.debug("\nFiltered " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatement events" +
+
+                        System.out.println();
+                        logger.debug("Filtered " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatement events" +
                                 "with lst_visit_date");
 
                         HashMap<String, Event> counsellingAndTreatmentWithLstVisitDateMap = new HashMap<>();
@@ -130,7 +133,8 @@ public class App {
                         List<Event> filteredQuickCheckEvents = events.stream().filter(event -> "Quick Check".equals(event.getEventType()))
                                 .collect(Collectors.toList());
 
-                        logger.debug("\nfiltered " + filteredQuickCheckEvents.size() + " Quick Check events");
+                        System.out.println();
+                        logger.debug("filtered " + filteredQuickCheckEvents.size() + " Quick Check events");
                         filteredQuickCheckEvents.forEach(quickCheckEvent -> {
                             String lookupKey = quickCheckEvent.getBaseEntityId() + "-" + quickCheckEvent.getDetails().get("contact_no");
                             // get corresponding  counselling and treatment visit date
@@ -171,7 +175,8 @@ public class App {
                                 final String[] ultrasoundWeeks = new String[1];
                                 final String[] ultrasoundDays = new String[1];
                                 String baseEntityId = profileEvent.getBaseEntityId();
-                                logger.debug("\nmutating Profile event for baseEntityId " + baseEntityId +
+                                System.out.println();
+                                logger.debug("mutating Profile event for baseEntityId " + baseEntityId +
                                         " with data from counselling and treatement event "
                                         + lookupKey);
                                 counsellingAndTreatmentEvent.getObs().forEach((obs -> {
