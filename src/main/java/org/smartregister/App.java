@@ -173,8 +173,7 @@ public class App {
                                 final String[] ultrasoundDone = new String[1];
                                 final String[] lmpDateString = new String[1];
                                 final String[] ultrasoundDateString = new String[1];
-                                final String[] ultrasoundWeeks = new String[1];
-                                final String[] ultrasoundDays = new String[1];
+                                final String[] sfhGaString = new String[1];
                                 String baseEntityId = profileEvent.getBaseEntityId();
                                 System.out.println();
                                 logger.debug("mutating Profile event for baseEntityId " + baseEntityId +
@@ -182,9 +181,11 @@ public class App {
                                         + lookupKey);
 
                                 List<Obs> lastVisitDateObservationList = counsellingAndTreatmentEvent.getObs().stream().filter(obs -> Objects.equals(obs.getFormSubmissionField(), "lst_visit_date")).collect(Collectors.toList());
-                                List<Object> lastVisitDateObservationValuesList =  !lastVisitDateObservationList.isEmpty()? lastVisitDateObservationList.get(0).getValues(): new ArrayList<>();
+                                List<Object> lastVisitDateObservationValuesList = !lastVisitDateObservationList.isEmpty() ? lastVisitDateObservationList.get(0).getValues() : new ArrayList<>();
                                 manualEncounterDate[0] = !lastVisitDateObservationValuesList.isEmpty() ? String.valueOf(lastVisitDateObservationValuesList.get(0)) : null;
+
                                 logger.debug(manualEncounterDate[0] == null ? "Not Found manual encounter date from counsellingAndTreatmentEvent lst_visit_date" : "Found manual encounter date " + manualEncounterDate[0] + " from counsellingAndTreatmentEvent lst_visit_date");
+
                                 profileEvent.getObs().forEach(obs -> {
                                     if (Objects.equals(obs.getFormSubmissionField(), "lmp_known_date")) {
                                         lmpDateString[0] = (String) obs.getValues().get(0);
@@ -202,18 +203,15 @@ public class App {
                                         ultrasoundDateString[0] = (String) obs.getValues().get(0);
                                         logger.debug("found ultrasound_done_date " + ultrasoundDateString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
-                                    if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_gest_age_wks")) {
-                                        ultrasoundWeeks[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found ultrasound_gest_age_wks " + ultrasoundWeeks[0] + " for event with baseEntityId " + baseEntityId);
-                                    }
-                                    if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_gest_age_days")) {
-                                        ultrasoundDays[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found ultrasound_gest_age_days " + ultrasoundDays[0] + " for event with baseEntityId " + baseEntityId);
+                                    if (Objects.equals(obs.getFormSubmissionField(), "sfh_gest_age")) {
+                                        sfhGaString[0] = (String) obs.getValues().get(0);
+                                        logger.debug("found sfh_gest_age " + sfhGaString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                 });
 
                                 // if lmpDone gestationalAge
-                                if (lmpDone[0] != null && !lmpDone[0].isEmpty() && lmpDone[0].equals("yes") && !lmpDateString[0].equals("0")) {
+                                if (lmpDone[0] != null && lmpDone[0].equals("yes") && !lmpDateString[0].equals("0")) {
+
                                     String lmpGestationalAge = Utils.lmpGestationalAge(lmpDateString[0], manualEncounterDate[0]);
 
                                     if (!lmpGestationalAge.equals("0")) {
@@ -221,27 +219,47 @@ public class App {
                                         addEventObs(profileEvent, ob);
 
                                         logger.debug("added lmp_gest_age obs " + ob + " to Profile Event");
+
                                     } else
                                         logger.error("found null value in user " + user.getUsername() + " while calculating lmpGestationalAge for profileEvent with baseEntityId " + profileEvent.getBaseEntityId()
                                                 + ", lmpString value =  " + lmpDateString[0] + " manualEncounterDate " + manualEncounterDate[0]);
                                 }
                                 if (ultrasoundDone[0] != null && !ultrasoundDateString[0].equals("0")) {
-                                    if (ultrasoundDays[0] != null && ultrasoundWeeks[0] != null) {
-                                        String ultrasoundEdd = Utils.calculateEddUltrasound(ultrasoundDateString[0], ultrasoundWeeks[0], ultrasoundDays[0]);
 
-                                        if (!ultrasoundEdd.equals("0")) {
-                                            Obs ob = createOb(ultrasoundEdd, "ultrasound_edd");
-                                            addEventObs(profileEvent, ob);
+                                    String ultrasoundGestationalAge = Utils.calculateGaBasedOnUltrasoundEdd(ultrasoundDateString[0],manualEncounterDate[0]);
 
-                                            logger.debug(user.getUsername() + " has a added ultrasound_edd obs " + ob + " to Profile Event");
-                                        } else
-                                            logger.error("found null value in user " + user.getUsername() + " while calculating calculateEddUltrasound for profileEvent with baseEntityId " + baseEntityId + ", " +
-                                                    "ultrasound_done_date value = " + ultrasoundDateString[0] + ", ultrasound_gest_age_wks " + ultrasoundWeeks[0] +
-                                                    ", ultrasound_gest_age_days " + manualEncounterDate[0]);
+                                    if (!ultrasoundGestationalAge.equals("0")) {
+                                        Obs ob = createOb(ultrasoundGestationalAge, "ultrasound_gest_age");
+                                        addEventObs(profileEvent, ob);
 
-                                    }
+                                        logger.debug(user.getUsername() + " has a added ultrasound_gest_age obs " + ob + " to Profile Event");
+                                    } else
+                                        logger.error("found null value in user " + user.getUsername() + " while calculating ultrasoundGestationalAge for profileEvent with baseEntityId " + baseEntityId + ", " +
+                                                "ultrasound_done_date value = " + ultrasoundDateString[0] +
+                                                ", manual encounter date = " + manualEncounterDate[0]);
                                     logger.debug("added profile event with baseEntityId " + baseEntityId);
                                     eventsToPost.add(profileEvent);
+
+
+                                }
+
+                                if (sfhGaString[0] != null && !sfhGaString[0].trim().isEmpty() ) {
+
+                                    String sfhEdd = Utils.calculateSfhEdd(sfhGaString[0],manualEncounterDate[0]);
+
+                                    if (!sfhEdd.equals("0")) {
+                                        Obs ob = createOb(sfhEdd, "sfh_edd");
+                                        addEventObs(profileEvent, ob);
+
+                                        logger.debug(user.getUsername() + " has a added sfh_edd obs " + ob + " to Profile Event");
+                                    } else
+                                        logger.error("found null value in user " + user.getUsername() + " while calculating sfhEdd for profileEvent with baseEntityId " + baseEntityId + ", " +
+                                                "sfhEdd value = " + sfhGaString[0] +
+                                                ", manual encounter date = " + manualEncounterDate[0]);
+                                    logger.debug("added profile event with baseEntityId " + baseEntityId);
+                                    eventsToPost.add(profileEvent);
+
+
                                 }
 //                                List<Obs>  observation = counsellingAndTreatmentEvent.getObs().stream()
 //                                        .filter(obs -> "visit_date".equals(obs.getFormSubmissionField()))
