@@ -39,3 +39,6 @@ build/
 
 #project
 src/main/resources/app.properties
+
+.idea
+logs
