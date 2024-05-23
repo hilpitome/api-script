@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Hello world!
@@ -100,7 +101,8 @@ public class App {
 
                 logger.info("making event request number " + i);
                 try (Response response1 = client.newCall(request1).execute()) {
-                    logger.info("\n\ngetting response for event batch " + i);
+                    System.out.println("\n");
+                    logger.info("getting response for event batch " + i);
                     i++;
                     EventWrapper eventWrapper = objectMapper.readValue(response1.body().bytes(), EventWrapper.class);
                     List<Event> events = eventWrapper.getEvents();
@@ -116,7 +118,8 @@ public class App {
                                 .filter(event -> event.getObs().stream()
                                         .anyMatch(obs -> "lst_visit_date".equals(obs.getFormSubmissionField())))
                                 .collect(Collectors.toList());
-                        logger.debug("\nFiltered " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatement events" +
+
+                        logger.debug("Filtered " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatement events" +
                                 "with lst_visit_date");
 
                         HashMap<String, Event> counsellingAndTreatmentWithLstVisitDateMap = new HashMap<>();
@@ -130,7 +133,8 @@ public class App {
                         List<Event> filteredQuickCheckEvents = events.stream().filter(event -> "Quick Check".equals(event.getEventType()))
                                 .collect(Collectors.toList());
 
-                        logger.debug("\nfiltered " + filteredQuickCheckEvents.size() + " Quick Check events");
+                        System.out.println();
+                        logger.debug("filtered " + filteredQuickCheckEvents.size() + " Quick Check events");
                         filteredQuickCheckEvents.forEach(quickCheckEvent -> {
                             String lookupKey = quickCheckEvent.getBaseEntityId() + "-" + quickCheckEvent.getDetails().get("contact_no");
                             // get corresponding  counselling and treatment visit date
@@ -140,15 +144,13 @@ public class App {
                                 List<Obs> observation = counsellingAndTreatmentEvent.getObs().stream()
                                         .filter(obs -> "lst_visit_date".equals(obs.getFormSubmissionField()))
                                         .collect(Collectors.toList());
-                                if(!observation.isEmpty()){
-                                    Obs visitDateOb = observation.get(0);
+                                if (!observation.isEmpty()) {
+                                    Obs visitDateOb = observation.get(0).clone();
                                     visitDateOb.setFormSubmissionField("visit_date");
-                                    List<Obs> quickCheckNonVisitObs = quickCheckEvent.getObs().stream()
-                                            .filter(obs -> !"visit_date".equals(obs.getFormSubmissionField()))
-                                            .collect(Collectors.toList());
-                                    // add new visit date ob
-                                    quickCheckNonVisitObs.add(visitDateOb);
-                                    quickCheckEvent.setObs(quickCheckNonVisitObs);
+                                    visitDateOb.setFieldCode("visit_date");
+
+                                    addEventObs(quickCheckEvent, visitDateOb);
+
                                     eventsToPost.add(quickCheckEvent);
                                     logger.debug("moved lst_visit_date from counselling and treatment event and contact "
                                             + lookupKey + " to Quick Check event " + quickCheckEvent.getBaseEntityId());
@@ -174,99 +176,69 @@ public class App {
                                 final String[] ultrasoundWeeks = new String[1];
                                 final String[] ultrasoundDays = new String[1];
                                 String baseEntityId = profileEvent.getBaseEntityId();
-                                logger.debug("\nmutating Profile event for baseEntityId " + baseEntityId + 
+                                System.out.println();
+                                logger.debug("mutating Profile event for baseEntityId " + baseEntityId +
                                         " with data from counselling and treatement event "
                                         + lookupKey);
-                                counsellingAndTreatmentEvent.getObs().forEach((obs -> {
-                                   if (Objects.equals(obs.getFormSubmissionField(), "lst_visit_date")) {
-                                        manualEncounterDate[0] = (String) obs.getValues().get(0);
-                                        logger.debug("Found manual encounter date " + manualEncounterDate[0] + " from lst_visit_date");
-                                    }
-                                }));
 
+                                List<Obs> lastVisitDateObservationList = counsellingAndTreatmentEvent.getObs().stream().filter(obs -> Objects.equals(obs.getFormSubmissionField(), "lst_visit_date")).collect(Collectors.toList());
+                                List<Object> lastVisitDateObservationValuesList =  !lastVisitDateObservationList.isEmpty()? lastVisitDateObservationList.get(0).getValues(): new ArrayList<>();
+                                manualEncounterDate[0] = !lastVisitDateObservationValuesList.isEmpty() ? String.valueOf(lastVisitDateObservationValuesList.get(0)) : null;
+                                logger.debug(manualEncounterDate[0] == null ? "Not Found manual encounter date from counsellingAndTreatmentEvent lst_visit_date" : "Found manual encounter date " + manualEncounterDate[0] + " from counsellingAndTreatmentEvent lst_visit_date");
                                 profileEvent.getObs().forEach(obs -> {
                                     if (Objects.equals(obs.getFormSubmissionField(), "lmp_known_date")) {
                                         lmpDateString[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found lmpDateString " + lmpDateString[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found lmp_known_date " + lmpDateString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "lmp_known")) {
                                         lmpDone[0] = (String) obs.getHumanReadableValues().get(0);
-                                        logger.debug("found lmpDone " + lmpDone[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found lmp_known " + lmpDone[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_done")) {
                                         ultrasoundDone[0] = (String) obs.getHumanReadableValues().get(0);
-                                        logger.debug("found ultrasoundDone " + ultrasoundDone[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found ultrasound_done " + ultrasoundDone[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_done_date")) {
                                         ultrasoundDateString[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found ultrasoundDateString " + ultrasoundDateString[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found ultrasound_done_date " + ultrasoundDateString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_gest_age_wks")) {
                                         ultrasoundWeeks[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found ultrasoundWeeks " + ultrasoundWeeks[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found ultrasound_gest_age_wks " + ultrasoundWeeks[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_gest_age_days")) {
                                         ultrasoundDays[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found ultrasoundDays " + ultrasoundDays[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.debug("found ultrasound_gest_age_days " + ultrasoundDays[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                 });
 
                                 // if lmpDone gestationalAge
                                 if (lmpDone[0] != null && !lmpDone[0].isEmpty() && lmpDone[0].equals("yes") && !lmpDateString[0].equals("0")) {
                                     String lmpGestationalAge = Utils.lmpGestationalAge(lmpDateString[0], manualEncounterDate[0]);
-                                    /*
-                                     create lmp_edd obs e.g
-                                      {
-                                            "fieldCode": "lmp_gest_age",
-                                            "fieldDataType": "text",
-                                            "fieldType": "formsubmissionField",
-                                            "formSubmissionField": "lmp_gest_age",
-                                            "humanReadableValues": [],
-                                            "parentCode": "",
-                                            "saveObsAsArray": false,
-                                            "set": [],
-                                            "values": [
-                                                "37 weeks 3 days"
-                                            ]
-                                        }
-                                    */
-                                    Obs ob = new Obs();
-                                    ob.setFieldCode("lmp_gest_age");
-                                    ob.setFormSubmissionField("lmp_gest_age");
-                                    ob.setFieldType("formsubmissionField");
-                                    List<Object> values = new ArrayList<>();
-                                    values.add(lmpGestationalAge);
-                                    ob.setValues(values);
-                                    profileEvent.getObs().add(ob);
-                                    logger.debug("added lmp_gest_age obs " + ob);
+
+                                    if (!lmpGestationalAge.equals("0")) {
+                                        Obs ob = createOb(lmpGestationalAge, "lmp_gest_age");
+                                        addEventObs(profileEvent, ob);
+
+                                        logger.debug("added lmp_gest_age obs " + ob + " to Profile Event");
+                                    } else
+                                        logger.error("found null value in user " + user.getUsername() + " while calculating lmpGestationalAge for profileEvent with baseEntityId " + profileEvent.getBaseEntityId()
+                                                + ", lmpString value =  " + lmpDateString[0] + " manualEncounterDate " + manualEncounterDate[0]);
                                 }
                                 if (ultrasoundDone[0] != null && !ultrasoundDateString[0].equals("0")) {
                                     if (ultrasoundDays[0] != null && ultrasoundWeeks[0] != null) {
                                         String ultrasoundEdd = Utils.calculateEddUltrasound(ultrasoundDateString[0], ultrasoundWeeks[0], ultrasoundDays[0]);
-                                    /*
-                                    *       {
-                                            "fieldCode": "ultrasound_edd",
-                                            "fieldDataType": "text",
-                                            "fieldType": "formsubmissionField",
-                                            "formSubmissionField": "ultrasound_edd",
-                                            "humanReadableValues": [],
-                                            "parentCode": "",
-                                            "saveObsAsArray": false,
-                                            "set": [],
-                                            "values": [
-                                                "0"
-                                            ]
-                                        }
-                                        * */
-                                        Obs ob = new Obs();
-                                        ob.setFieldCode("ultrasound_edd");
-                                        ob.setFormSubmissionField("ultrasound_edd");
-                                        ob.setFieldType("formsubmissionField");
-                                        List<Object> values = new ArrayList<>();
-                                        values.add(ultrasoundEdd);
-                                        ob.setValues(values);
-                                        profileEvent.getObs().add(ob);
-                                        logger.debug("added ultrasound_edd obs " + ob);
+
+                                        if (!ultrasoundEdd.equals("0")) {
+                                            Obs ob = createOb(ultrasoundEdd, "ultrasound_edd");
+                                            addEventObs(profileEvent, ob);
+
+                                            logger.debug(user.getUsername() + " has a added ultrasound_edd obs " + ob + " to Profile Event");
+                                        } else
+                                            logger.error("found null value in user " + user.getUsername() + " while calculating calculateEddUltrasound for profileEvent with baseEntityId " + baseEntityId + ", " +
+                                                    "ultrasound_done_date value = " + ultrasoundDateString[0] + ", ultrasound_gest_age_wks " + ultrasoundWeeks[0] +
+                                                    ", ultrasound_gest_age_days " + manualEncounterDate[0]);
+
                                     }
                                     logger.debug("added profile event with baseEntityId " + baseEntityId);
                                     eventsToPost.add(profileEvent);
@@ -292,8 +264,8 @@ public class App {
             } while (count > 0);
 
 
-            // Define the chunk size
-            int chunkSize = 250;
+            // Define the chunk size. Too large a size, and we get an error code 413 i.e content too large as per the server
+            int chunkSize = 50;
             logger.debug("Posting " + eventsToPost.size() + " events");
 
             // Loop through the ArrayList in chunks
@@ -348,6 +320,39 @@ public class App {
 
         });
 
+    }
+
+    /**
+     * @param value               The new or updated observation
+     * @param formSubmissionField The Obs formSubmissionField or FieldCode
+     * @return the new Obs (Observation)
+     */
+    public static Obs createOb(String value, String formSubmissionField) {
+        Obs observation = new Obs();
+        observation.setFieldCode(formSubmissionField);
+        observation.setFormSubmissionField(formSubmissionField);
+        observation.setFieldType("formsubmissionField");
+        List<Object> values = new ArrayList<>();
+        values.add(value);
+        observation.setValues(values);
+        return observation;
+    }
+
+    /**
+     * Given an Event, and Obs, this method creates an observation and adds it to the event's list of obs.
+     * If an obs with the same formSubmissionField exists it is removed and replaced with the new one
+     *
+     * @param event       The Event containing the observations to update
+     * @param observation The new or updated observation
+     */
+
+    public static void addEventObs(Event event, Obs observation) {
+
+        List<Obs> otherEventObs = event.getObs().stream()
+                .filter(obs -> !observation.getFormSubmissionField().equals(obs.getFormSubmissionField()))
+                .collect(Collectors.toList());
+        otherEventObs.add(observation);
+        event.setObs(otherEventObs);
     }
 
 }
