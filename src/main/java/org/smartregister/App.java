@@ -2,6 +2,7 @@ package org.smartregister;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import kotlin.Pair;
 import okhttp3.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -26,6 +27,9 @@ public class App {
         List<User> users = csvReader.readUsersFromCSV(env.getCsvFilePath());
 
         users.forEach(user -> {
+            /**
+             * User Authentication
+             */
 
             System.out.println();
             logger.info("============================================================");
@@ -44,7 +48,6 @@ public class App {
             // Serialize AuthenticationBody to JSON
             ObjectMapper objectMapper = null;
 
-
             // Create OkHttp client
             OkHttpClient client = new OkHttpClient();
 
@@ -56,10 +59,9 @@ public class App {
                     .post(body)
                     .addHeader("Content-Type", "application/x-www-form-urlencoded")
                     .build();
-            int count = 250;
-            long lastServerVersion = 0;
-            List<Event> eventsToPost = new ArrayList<>();
+
             AuthResponse authResponse = null;
+            logger.info("AUTHENTICATION");
             logger.info("authenticating user with username " + user.getUsername());
             try (Response response = client.newCall(request).execute()) {
 
@@ -67,7 +69,7 @@ public class App {
                 // Deserialize the response body to AuthResponse
                 objectMapper = new ObjectMapper();
                 authResponse = objectMapper.readValue(response.body().string(), AuthResponse.class);
-                logger.info("succesfully authenticated to keycloack and obtained access_token ");
+                logger.info("successfully authenticated to Keycloak and obtained access_token ");
 
                 String url = HttpUrl.parse(env.getOpensrpUrl() + "/security/authenticate")
                         .newBuilder()
@@ -92,12 +94,27 @@ public class App {
             } catch (IOException e) {
                 logger.error(e.getMessage(), e);
             }
+
+            /***
+             * Sync in Batches
+            */
+
+            System.out.println();
+            logger.info("DATA FETCH");
+            int lastEventCountReceived = 0;
+            long lastServerVersion = 0;
+            long eventPullLimit = 250; //Batch Size
+            List<Event> eventsToPost = new ArrayList<>();
             int i = 0;
+
+            String hostUrl = env.getOpensrpUrl() + "/rest/event/sync";
+            logger.info("server host url - " + hostUrl);
+
             do {
 
-                String url = HttpUrl.parse(env.getOpensrpUrl() + "/rest/event/sync")
+                String url = HttpUrl.parse(hostUrl)
                         .newBuilder()
-                        .addQueryParameter("limit", "250")
+                        .addQueryParameter("limit", String.valueOf(eventPullLimit))
                         .addQueryParameter("teamId", user.getTeamId())
                         .addQueryParameter("serverVersion", String.valueOf(lastServerVersion))
                         .addQueryParameter("access_token", authResponse.getAccessToken())
@@ -108,17 +125,18 @@ public class App {
                         .addHeader("Content-Type", "application/json")
                         .build();
 
-                logger.info("making event request number " + (i + 1));
+                logger.info("fetching events for batch request number " + (i + 1));
                 try (Response response1 = client.newCall(request1).execute()) {
-                    logger.info("getting response for event batch " + (i + 1));
+                    logger.info("processing response for event batch " + (i + 1));
                     i++;
                     EventWrapper eventWrapper = objectMapper.readValue(response1.body().bytes(), EventWrapper.class);
                     List<Event> events = eventWrapper.getEvents();
-                    count = eventWrapper.getNoOfEvents();
-                    if (count > 0) {
-                        logger.debug("no of events received " + count);
-                        lastServerVersion = events.get(events.size() - 1).getServerVersion();
+                    lastEventCountReceived = eventWrapper.getNoOfEvents();
+                    if (lastEventCountReceived > 0) {
+                        logger.debug("no of events received " + lastEventCountReceived);
 
+                        Pair<Long,Long> serverVersionPair = SyncUtils.getMinMaxServerVersions(events);
+                        lastServerVersion = serverVersionPair.getSecond() ;
 
                         // Filter and collect the results
                         List<Event> counsellingAndTreatmentWithLstVisitDate = events.stream()
@@ -128,7 +146,7 @@ public class App {
                                 .collect(Collectors.toList());
 
                         System.out.println();
-                        logger.debug("filtered " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatment events" +
+                        logger.debug("FILTERED " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatment events" +
                                 " with lst_visit_date");
 
                         HashMap<String, Event> counsellingAndTreatmentWithLstVisitDateMap = new HashMap<>();
@@ -139,7 +157,7 @@ public class App {
                         logger.info("created hashmap of baseentityids-concactno for counselling and treatment events");
                         List<Event> filteredQuickCheckEvents = events.stream().filter(event -> "Quick Check".equals(event.getEventType()))
                                 .collect(Collectors.toList());
-                        logger.debug("filtered " + filteredQuickCheckEvents.size() + " Quick Check events");
+                        logger.debug("FILTERED " + filteredQuickCheckEvents.size() + " Quick Check events");
                         filteredQuickCheckEvents.forEach(quickCheckEvent -> {
                             String lookupKey = quickCheckEvent.getBaseEntityId() + "-" + quickCheckEvent.getDetails().get("contact_no");
                             // get corresponding  counselling and treatment visit date
@@ -166,7 +184,7 @@ public class App {
 
                         List<Event> profileEvents = events.stream().filter(event -> "Profile".equals(event.getEventType()))
                                 .collect(Collectors.toList());
-                        logger.debug("filtered " + profileEvents.size() + " Profile events");
+                        logger.debug("FILTERED " + profileEvents.size() + " Profile events");
                         profileEvents.forEach(profileEvent -> {
                             String lookupKey = profileEvent.getBaseEntityId() + "-" + profileEvent.getDetails().get("contact_no");
                             // get corresponding  counselling and treatment visit date
@@ -278,17 +296,15 @@ public class App {
                                             logger.debug("added gest_age obs based on select_gest_age_edd of SFH " + ob + " to Profile Event");
                                         }
 
-                                    } else
+                                    } else{
                                         logger.error("found null value in user " + user.getUsername() + " while calculating sfhEdd for profileEvent with baseEntityId " + baseEntityId + ", " +
                                                 "sfhEdd value = " + sfhGaString[0] +
-                                                ", manual encounter date = " + manualEncounterDate[0]);
-
+                                                ", manual encounter date = " + manualEncounterDate[0]);}
 
                                 }
 
                                 eventsToPost.add(profileEvent);
                                 logger.debug("added profile event with baseEntityId " + baseEntityId);
-
                             }
                         });
                     }
@@ -298,10 +314,13 @@ public class App {
                     logger.error(e.getMessage(), e);
                 }
 
+            } while (lastEventCountReceived == eventPullLimit);
 
-            } while (count > 0);
 
-
+            /**
+             * Submit all modified events to the server in chunks e.g. size 50
+             *
+             * */
             // Define the chunk size. Too large a size, and we get an error code 413 i.e content too large as per the server
             int chunkSize = 50;
             logger.debug("Processing " + eventsToPost.size() + " events for user " + user.getUsername());
@@ -362,7 +381,7 @@ public class App {
 
         System.out.println();
         logger.info("============================================================");
-        logger.debug("Script Execution Complete!! :D");
+        logger.debug("Script Execution Complete!!");
         logger.info("============================================================");
     }
 

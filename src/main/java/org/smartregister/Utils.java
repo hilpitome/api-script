@@ -1,5 +1,6 @@
 package org.smartregister;
 
+import kotlin.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -7,6 +8,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 public class Utils {
     protected static final Logger logger = LogManager.getLogger();
