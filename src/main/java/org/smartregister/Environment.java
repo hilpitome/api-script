@@ -8,6 +8,8 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Properties;
 
 
@@ -21,13 +23,12 @@ public class Environment {
     private String opensrpUrl;
     private String realm;
     private String tokenUrl;
-    private String csvFilePath;
 
-    public Environment(){
+    public Environment(String propertiesFile){
         Properties properties = new Properties();
 
+        try (InputStream inputStream = Files.newInputStream(Paths.get(propertiesFile))){
 
-        try (InputStream inputStream = App.class.getResourceAsStream("/app.properties")) {
             properties.load(inputStream);
 
             // Read a specific key-value pair
@@ -37,9 +38,9 @@ public class Environment {
             opensrpUrl = properties.getProperty("OPENSRP_URL");
             realm = properties.getProperty("REALM");
             tokenUrl = properties.getProperty("TOKEN_URL");
-            csvFilePath = properties.getProperty("USER_CREDENTIALS_FILE");
 
-        } catch (IOException e) {
+        }
+        catch (Exception e) {
             e.printStackTrace();
         }
       
