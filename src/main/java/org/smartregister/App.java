@@ -6,11 +6,15 @@ import kotlin.Pair;
 import okhttp3.*;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.logging.Level;
+import java.util.logging.LogManager;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -21,11 +25,18 @@ public class App {
     protected static final Logger logger = Logger.getLogger(App.class.getName());
 
     public static void main(String[] args) {
+        System.out.println(App.class.getName());
+
         /**
          * Process CLI params
          * to specify properties use -p=</path/to/app.properties>
          *     to specify credentials use -c=</path/to/user_credentials.csv>
          */
+        try (InputStream fileInputStream = Files.newInputStream(Paths.get("src/main/resources/java.logging.properties"))) {
+            LogManager.getLogManager().readConfiguration(fileInputStream);
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, e.getMessage(), e);
+        }
 
         String appPropertiesFilePath = "";
         String userCredentialsFilePath = "";
