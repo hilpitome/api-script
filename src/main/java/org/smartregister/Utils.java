@@ -12,7 +12,7 @@ public class Utils {
 
     //Gestational Age based on the Ultrasound GA: 280 - ({ultrasound_edd} - {today/manual encounter date})
     public static String calculateGaBasedOnUltrasoundEdd(String ultrasoundDateEddDateString, String manualEncounterDateString) {
-        logger.log(Level.WARNING, "Dates U/EDD " + ultrasoundDateEddDateString + " Manual Enc: " + manualEncounterDateString);
+        logger.log(Level.INFO, "Dates U/EDD " + ultrasoundDateEddDateString + " Manual Enc: " + manualEncounterDateString);
         if (ultrasoundDateEddDateString != null && manualEncounterDateString != null) {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
             LocalDate ultrasoundDateEddDate = LocalDate.parse(ultrasoundDateEddDateString, formatter);
