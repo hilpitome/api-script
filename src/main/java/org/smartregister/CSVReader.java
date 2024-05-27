@@ -1,7 +1,5 @@
 package org.smartregister;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -10,9 +8,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class CSVReader {
-    protected static final Logger logger = LogManager.getLogger();
+    protected static final Logger logger =  Logger.getLogger(CSVReader.class.getName());
 
     public List<User> readUsersFromCSV(String fileName) {
         List<User> users = new ArrayList<>();
@@ -37,7 +37,7 @@ public class CSVReader {
                 }
             }
         } catch (IOException e) {
-            logger.error(e.getMessage(), e);
+            logger.log(Level.SEVERE, e.getMessage(), e);
         }
         return users;
 

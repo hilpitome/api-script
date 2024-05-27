@@ -4,27 +4,42 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kotlin.Pair;
 import okhttp3.*;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /**
  * Hello world!
  */
 public class App {
-    protected static final Logger logger = LogManager.getLogger();
+    protected static final Logger logger = Logger.getLogger(App.class.getName());
 
     public static void main(String[] args) {
-        Environment env = new Environment();
+        /**
+         * Process CLI params
+         * to specify properties use -p=</path/to/app.properties>
+         *     to specify credentials use -c=</path/to/user_credentials.csv>
+         */
+
+        String appPropertiesFilePath = "";
+        String userCredentialsFilePath = "";
+        String token;
+        for (int i = 0; i < args.length; i++) {
+            token = args[i].trim();
+            userCredentialsFilePath = token.startsWith("-c") ? token.substring(token.indexOf('=') + 1) : userCredentialsFilePath;
+            appPropertiesFilePath = token.startsWith("-p") ? token.substring(token.indexOf('=') + 1) : appPropertiesFilePath;
+        }
+
+        Environment env = new Environment(appPropertiesFilePath);
         CSVReader csvReader = new CSVReader();
-        logger.info("reading user credentials csv files");
-        List<User> users = csvReader.readUsersFromCSV(env.getCsvFilePath());
+        logger.log(Level.INFO, "reading user credentials csv files");
+        List<User> users = csvReader.readUsersFromCSV(userCredentialsFilePath);
 
         users.forEach(user -> {
             /**
@@ -32,9 +47,9 @@ public class App {
              */
 
             System.out.println();
-            logger.info("============================================================");
-            logger.info("Processing data for user with username " + user.getUsername());
-            logger.info("============================================================");
+            logger.log(Level.INFO, "============================================================");
+            logger.log(Level.INFO, "Processing data for user with username " + user.getUsername());
+            logger.log(Level.INFO, "============================================================");
             System.out.println();
 
             // Convert AuthenticationBody to URL-encoded string
@@ -61,15 +76,15 @@ public class App {
                     .build();
 
             AuthResponse authResponse = null;
-            logger.info("AUTHENTICATION");
-            logger.info("authenticating user with username " + user.getUsername());
+            logger.log(Level.INFO, "AUTHENTICATION");
+            logger.log(Level.INFO, "authenticating user with username " + user.getUsername());
             try (Response response = client.newCall(request).execute()) {
 
                 // response from keycloak
                 // Deserialize the response body to AuthResponse
                 objectMapper = new ObjectMapper();
                 authResponse = objectMapper.readValue(response.body().string(), AuthResponse.class);
-                logger.info("successfully authenticated to Keycloak and obtained access_token ");
+                logger.log(Level.INFO, "successfully authenticated to Keycloak and obtained access_token ");
 
                 String url = HttpUrl.parse(env.getOpensrpUrl() + "/security/authenticate")
                         .newBuilder()
@@ -83,16 +98,16 @@ public class App {
                 try (Response openSRPAuthResponse = client.newCall(opensrpAuthRequest).execute()) {
                     OpenSRPAuthResponse opensrpAuth = objectMapper.readValue(openSRPAuthResponse.body().string(), OpenSRPAuthResponse.class);
                     user.setTeamId(opensrpAuth.getTeam().getInnerTeam().getUuid());
-                    logger.info("succesfully retrieved team id as " + user.getTeamId() + " for user " + user.getUsername());
+                    logger.log(Level.INFO, "succesfully retrieved team id as " + user.getTeamId() + " for user " + user.getUsername());
 
                 } catch (IOException e) {
 
-                    logger.error("failed to get team id for user " + user.getUsername());
-                    logger.error(e.getMessage(), e);
+                    logger.log(Level.SEVERE, "failed to get team id for user " + user.getUsername());
+                    logger.log(Level.SEVERE, e.getMessage(), e);
                 }
 
             } catch (IOException e) {
-                logger.error(e.getMessage(), e);
+                logger.log(Level.SEVERE, e.getMessage(), e);
             }
 
             /***
@@ -100,7 +115,7 @@ public class App {
              */
 
             System.out.println();
-            logger.info("DATA FETCH");
+            logger.log(Level.INFO, "DATA FETCH");
             int lastEventCountReceived = 0;
             long lastServerVersion = 0;
             long eventPullLimit = 250; //Batch Size
@@ -108,7 +123,7 @@ public class App {
             int i = 0;
 
             String hostUrl = env.getOpensrpUrl() + "/rest/event/sync";
-            logger.info("server host url - " + hostUrl);
+            logger.log(Level.INFO, "server host url - " + hostUrl);
 
             do {
 
@@ -125,15 +140,15 @@ public class App {
                         .addHeader("Content-Type", "application/json")
                         .build();
 
-                logger.info("fetching events for batch request number " + (i + 1));
+                logger.log(Level.INFO, "fetching events for batch request number " + (i + 1));
                 try (Response response1 = client.newCall(request1).execute()) {
-                    logger.info("processing response for event batch " + (i + 1));
+                    logger.log(Level.INFO, "processing response for event batch " + (i + 1));
                     i++;
                     EventWrapper eventWrapper = objectMapper.readValue(response1.body().bytes(), EventWrapper.class);
                     List<Event> events = eventWrapper.getEvents();
                     lastEventCountReceived = eventWrapper.getNoOfEvents();
                     if (lastEventCountReceived > 0) {
-                        logger.debug("no of events received " + lastEventCountReceived);
+                        logger.log(Level.INFO, "no of events received " + lastEventCountReceived);
 
                         Pair<Long, Long> serverVersionPair = SyncUtils.getMinMaxServerVersions(events);
                         lastServerVersion = serverVersionPair.getSecond();
@@ -146,7 +161,7 @@ public class App {
                                 .collect(Collectors.toList());
 
                         System.out.println();
-                        logger.debug("FILTERED " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatment events" +
+                        logger.log(Level.INFO, "FILTERED " + counsellingAndTreatmentWithLstVisitDate.size() + " counselling and treatment events" +
                                 " with lst_visit_date");
 
                         HashMap<String, Event> counsellingAndTreatmentWithLstVisitDateMap = new HashMap<>();
@@ -154,10 +169,10 @@ public class App {
                                 .forEach(event -> counsellingAndTreatmentWithLstVisitDateMap
                                         .put(event.getBaseEntityId() + "-" + event.getDetails().get("contact_no"), event)
                                 );
-                        logger.info("created hashmap of baseentityids-concactno for counselling and treatment events");
+                        logger.log(Level.INFO, "created hashmap of baseentityids-concactno for counselling and treatment events");
                         List<Event> filteredQuickCheckEvents = events.stream().filter(event -> "Quick Check".equals(event.getEventType()))
                                 .collect(Collectors.toList());
-                        logger.debug("FILTERED " + filteredQuickCheckEvents.size() + " Quick Check events");
+                        logger.log(Level.INFO, "FILTERED " + filteredQuickCheckEvents.size() + " Quick Check events");
                         filteredQuickCheckEvents.forEach(quickCheckEvent -> {
                             String lookupKey = quickCheckEvent.getBaseEntityId() + "-" + quickCheckEvent.getDetails().get("contact_no");
                             // get corresponding  counselling and treatment visit date
@@ -175,7 +190,7 @@ public class App {
                                     addEventObs(quickCheckEvent, visitDateOb);
 
                                     eventsToPost.add(quickCheckEvent);
-                                    logger.debug("moved lst_visit_date from counselling and treatment event and contact "
+                                    logger.log(Level.INFO, "moved lst_visit_date from counselling and treatment event and contact "
                                             + lookupKey + " to Quick Check event " + quickCheckEvent.getBaseEntityId());
                                 }
 
@@ -184,7 +199,7 @@ public class App {
 
                         List<Event> profileEvents = events.stream().filter(event -> "Profile".equals(event.getEventType()))
                                 .collect(Collectors.toList());
-                        logger.debug("FILTERED " + profileEvents.size() + " Profile events");
+                        logger.log(Level.INFO, "FILTERED " + profileEvents.size() + " Profile events");
                         profileEvents.forEach(profileEvent -> {
                             String lookupKey = profileEvent.getBaseEntityId() + "-" + profileEvent.getDetails().get("contact_no");
                             // get corresponding  counselling and treatment visit date
@@ -199,34 +214,34 @@ public class App {
                                 final String[] sfhGaString = new String[1];
                                 String baseEntityId = profileEvent.getBaseEntityId();
                                 System.out.println();
-                                logger.debug("mutating Profile event for baseEntityId " + baseEntityId +
+                                logger.log(Level.INFO, "mutating Profile event for baseEntityId " + baseEntityId +
                                         " with data from counselling and treatment event "
                                         + lookupKey);
 
                                 manualEncounterDate[0] = getObservationValueByFormSubmissionField(counsellingAndTreatmentEvent, "lst_visit_date");
 
-                                logger.debug(manualEncounterDate[0] == null ? "Not Found manual encounter date from counsellingAndTreatmentEvent lst_visit_date" : "Found manual encounter date " + manualEncounterDate[0] + " from counsellingAndTreatmentEvent lst_visit_date");
+                                logger.log(Level.INFO, manualEncounterDate[0] == null ? "Not Found manual encounter date from counsellingAndTreatmentEvent lst_visit_date" : "Found manual encounter date " + manualEncounterDate[0] + " from counsellingAndTreatmentEvent lst_visit_date");
 
                                 profileEvent.getObs().forEach(obs -> {
                                     if (Objects.equals(obs.getFormSubmissionField(), "lmp_known_date")) {
                                         lmpDateString[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found lmp_known_date " + lmpDateString[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.log(Level.INFO, "found lmp_known_date " + lmpDateString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "lmp_known")) {
                                         lmpDone[0] = (String) obs.getHumanReadableValues().get(0);
-                                        logger.debug("found lmp_known " + lmpDone[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.log(Level.INFO, "found lmp_known " + lmpDone[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_done")) {
                                         ultrasoundDone[0] = (String) obs.getHumanReadableValues().get(0);
-                                        logger.debug("found ultrasound_done " + ultrasoundDone[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.log(Level.INFO, "found ultrasound_done " + ultrasoundDone[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_edd")) {
                                         ultrasoundEddDateString[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found ultrasound_edd date " + ultrasoundEddDateString[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.log(Level.INFO, "found ultrasound_edd date " + ultrasoundEddDateString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                     if (Objects.equals(obs.getFormSubmissionField(), "sfh_gest_age")) {
                                         sfhGaString[0] = (String) obs.getValues().get(0);
-                                        logger.debug("found sfh_gest_age " + sfhGaString[0] + " for event with baseEntityId " + baseEntityId);
+                                        logger.log(Level.INFO, "found sfh_gest_age " + sfhGaString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
                                 });
 
@@ -242,15 +257,15 @@ public class App {
                                         Obs ob = createOb(lmpGestationalAge, "lmp_gest_age");
                                         addEventObs(profileEvent, ob);
 
-                                        logger.debug("added lmp_gest_age obs " + ob + " to Profile Event");
+                                        logger.log(Level.INFO, "added lmp_gest_age obs " + ob + " to Profile Event");
 
                                         if (GuestAgeEddEnum.LMP.equals(selectedGaEddType)) {
                                             addGestationalAgeObservationToProfileEvent(profileEvent, lmpGestationalAge);
-                                            logger.debug("added gest_age obs based on select_gest_age_edd of LMP " + ob + " to Profile Event");
+                                            logger.log(Level.INFO, "added gest_age obs based on select_gest_age_edd of LMP " + ob + " to Profile Event");
                                         }
 
                                     } else
-                                        logger.error("found null value in user " + user.getUsername() + " while calculating lmpGestationalAge for profileEvent with baseEntityId " + profileEvent.getBaseEntityId()
+                                        logger.log(Level.SEVERE, "found null value in user " + user.getUsername() + " while calculating lmpGestationalAge for profileEvent with baseEntityId " + profileEvent.getBaseEntityId()
                                                 + ", lmpString value =  " + lmpDateString[0] + " manualEncounterDate " + manualEncounterDate[0]);
                                 }
 
@@ -264,16 +279,16 @@ public class App {
                                         Obs ob = createOb(ultrasoundGestationalAge, "ultrasound_gest_age");
                                         addEventObs(profileEvent, ob);
 
-                                        logger.debug(user.getUsername() + " has a added ultrasound_gest_age obs " + ob + " to Profile Event");
+                                        logger.log(Level.INFO, user.getUsername() + " has a added ultrasound_gest_age obs " + ob + " to Profile Event");
 
                                         if (GuestAgeEddEnum.ULTRASOUND.equals(selectedGaEddType)) {
                                             addGestationalAgeObservationToProfileEvent(profileEvent, ultrasoundGestationalAge);
-                                            logger.debug("added gest_age obs based on select_gest_age_edd of Ultrasound " + ob + " to Profile Event");
+                                            logger.log(Level.INFO, "added gest_age obs based on select_gest_age_edd of Ultrasound " + ob + " to Profile Event");
                                         }
 
 
                                     } else
-                                        logger.error("found null value in user " + user.getUsername() + " while calculating ultrasoundGestationalAge for profileEvent with baseEntityId " + baseEntityId + ", " +
+                                        logger.log(Level.SEVERE, "found null value in user " + user.getUsername() + " while calculating ultrasoundGestationalAge for profileEvent with baseEntityId " + baseEntityId + ", " +
                                                 "ultrasound_edd_date value = " + ultrasoundEddDateString[0] +
                                                 ", manual encounter date = " + manualEncounterDate[0]);
 
@@ -288,16 +303,16 @@ public class App {
                                         Obs ob = createOb(sfhEdd, "sfh_edd");
                                         addEventObs(profileEvent, ob);
 
-                                        logger.debug(user.getUsername() + " has a added sfh_edd obs " + ob + " to Profile Event");
+                                        logger.log(Level.INFO, user.getUsername() + " has a added sfh_edd obs " + ob + " to Profile Event");
 
 
                                         if (GuestAgeEddEnum.SFH.equals(selectedGaEddType)) {
                                             addGestationalAgeObservationToProfileEvent(profileEvent, sfhGaString[0] + " weeks 0 days");
-                                            logger.debug("added gest_age obs based on select_gest_age_edd of SFH " + ob + " to Profile Event");
+                                            logger.log(Level.INFO, "added gest_age obs based on select_gest_age_edd of SFH " + ob + " to Profile Event");
                                         }
 
                                     } else {
-                                        logger.error("found null value in user " + user.getUsername() + " while calculating sfhEdd for profileEvent with baseEntityId " + baseEntityId + ", " +
+                                        logger.log(Level.SEVERE, "found null value in user " + user.getUsername() + " while calculating sfhEdd for profileEvent with baseEntityId " + baseEntityId + ", " +
                                                 "sfhEdd value = " + sfhGaString[0] +
                                                 ", manual encounter date = " + manualEncounterDate[0]);
                                     }
@@ -305,14 +320,14 @@ public class App {
                                 }
 
                                 eventsToPost.add(profileEvent);
-                                logger.debug("added profile event with baseEntityId " + baseEntityId);
+                                logger.log(Level.INFO, "added profile event with baseEntityId " + baseEntityId);
                             }
                         });
                     }
 
 
                 } catch (IOException e) {
-                    logger.error(e.getMessage(), e);
+                    logger.log(Level.SEVERE, e.getMessage(), e);
                 }
 
             } while (lastEventCountReceived == eventPullLimit);
@@ -324,7 +339,7 @@ public class App {
              * */
             // Define the chunk size. Too large a size, and we get an error code 413 i.e content too large as per the server
             int chunkSize = 50;
-            logger.debug("Processing " + eventsToPost.size() + " events for user " + user.getUsername());
+            logger.log(Level.INFO, "Processing " + eventsToPost.size() + " events for user " + user.getUsername());
 
             int chunkNo = 1;
             // Loop through the ArrayList in chunks
@@ -337,7 +352,7 @@ public class App {
                 EventWrapper wrapper = new EventWrapper();
                 wrapper.setEvents(chunk);
 
-                logger.debug("POSTing Chunk NO. " + chunkNo++ + " for " + user.getUsername());
+                logger.log(Level.INFO, "POSTing Chunk NO. " + chunkNo++ + " for " + user.getUsername());
 
                 String url = HttpUrl.parse(env.getOpensrpUrl() + "/rest/event/add")
                         .newBuilder()
@@ -348,7 +363,7 @@ public class App {
                 try {
                     json = objectMapper.writeValueAsString(wrapper);
                 } catch (JsonProcessingException e) {
-                    logger.error(e.getMessage(), e);
+                    logger.log(Level.SEVERE, e.getMessage(), e);
                 }
 
                 if (json != null) {
@@ -363,15 +378,15 @@ public class App {
                     client.newCall(request1).enqueue(new Callback() {
                         @Override
                         public void onFailure(Call call, IOException e) {
-                            logger.error(e.getMessage(), e);
+                            logger.log(Level.SEVERE, e.getMessage(), e);
                         }
 
                         @Override
                         public void onResponse(Call call, Response response) throws IOException {
                             if (response.isSuccessful()) {
-                                logger.debug("Asynchronous chunk POST complete: Response: " + response.body().string());
+                                logger.log(Level.INFO, "Asynchronous chunk POST complete: Response: " + response.body().string());
                             } else {
-                                logger.error("Asynchronous chunk POST complete:Post events failed with error code " + response.code());
+                                logger.log(Level.SEVERE, "Asynchronous chunk POST complete:Post events failed with error code " + response.code());
                             }
                         }
                     });
@@ -381,9 +396,9 @@ public class App {
         });
 
         System.out.println();
-        logger.info("============================================================");
-        logger.debug("Script Execution Complete!!");
-        logger.info("============================================================");
+        logger.log(Level.INFO, "============================================================");
+        logger.log(Level.INFO, "Script Execution Complete!!");
+        logger.log(Level.INFO, "============================================================");
     }
 
     /**
