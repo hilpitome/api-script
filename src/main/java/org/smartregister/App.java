@@ -8,10 +8,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -103,7 +100,7 @@ public class App {
             logger.info("DATA FETCH");
             int lastEventCountReceived = 0;
             long lastServerVersion = 0;
-            long eventPullLimit = 250; //Batch Size
+            long eventPullLimit = 150; //Batch Size
             List<Event> eventsToPost = new ArrayList<>();
             int i = 0;
 
@@ -155,6 +152,25 @@ public class App {
                                         .put(event.getBaseEntityId() + "-" + event.getDetails().get("contact_no"), event)
                                 );
                         logger.info("created hashmap of baseentityids-concactno for counselling and treatment events");
+
+                        List<Event> filteredContactVisitEvents = events.stream()
+                                .filter(event -> "Contact Visit".equals(event.getEventType()))
+                                .filter(event -> event.getDetails().get("attention_flag_facts").contains("lst_visit_date"))
+                                .collect(Collectors.toList());
+                        logger.debug("FILTERED " + filteredContactVisitEvents.size() + " Contact Visit events");
+
+                        HashMap<String, Event> contactVisitWithLstVisitDateMap = new HashMap<>();
+                        filteredContactVisitEvents
+                                .forEach(contactVisitEvent -> {
+                                            String contactNo = Utils.getContactNumberFromDetailsMap(contactVisitEvent.getDetails(), contactVisitEvent.getBaseEntityId());
+                                            String lookupKey = contactVisitEvent.getBaseEntityId() + "-" + contactNo;
+                                            contactVisitWithLstVisitDateMap
+                                                    .put(lookupKey, contactVisitEvent);
+                                        }
+                                );
+                        logger.info("created hashmap of baseentityids-concactno for Contact Visit events");
+
+
                         List<Event> filteredQuickCheckEvents = events.stream().filter(event -> "Quick Check".equals(event.getEventType()))
                                 .collect(Collectors.toList());
                         logger.debug("FILTERED " + filteredQuickCheckEvents.size() + " Quick Check events");
@@ -197,6 +213,9 @@ public class App {
                                 final String[] lmpDateString = new String[1];
                                 final String[] ultrasoundEddDateString = new String[1];
                                 final String[] sfhGaString = new String[1];
+                                final String[] lmpGaString = new String[1];
+                                final String[] ultrasoundGaString = new String[1];
+                                final String[] currentSfhGaAge = new String[1];
                                 String baseEntityId = profileEvent.getBaseEntityId();
                                 System.out.println();
                                 logger.debug("mutating Profile event for baseEntityId " + baseEntityId +
@@ -205,7 +224,7 @@ public class App {
 
                                 manualEncounterDate[0] = getObservationValueByFormSubmissionField(counsellingAndTreatmentEvent, "lst_visit_date");
 
-                                logger.debug(manualEncounterDate[0] == null ? "Not Found manual encounter date from counsellingAndTreatmentEvent lst_visit_date" : "Found manual encounter date " + manualEncounterDate[0] + " from counsellingAndTreatmentEvent lst_visit_date");
+                                logger.debug(manualEncounterDate[0] == null ? "Not found manual encounter date from counsellingAndTreatmentEvent lst_visit_date" : "Found manual encounter date " + manualEncounterDate[0] + " from counsellingAndTreatmentEvent lst_visit_date");
 
                                 profileEvent.getObs().forEach(obs -> {
                                     if (Objects.equals(obs.getFormSubmissionField(), "lmp_known_date")) {
@@ -228,6 +247,15 @@ public class App {
                                         sfhGaString[0] = (String) obs.getValues().get(0);
                                         logger.debug("found sfh_gest_age " + sfhGaString[0] + " for event with baseEntityId " + baseEntityId);
                                     }
+                                    if (Objects.equals(obs.getFormSubmissionField(), "ultrasound_gest_age")) {
+                                        ultrasoundGaString[0] = (String) obs.getValues().get(0);
+                                        logger.debug("found sfh_gest_age " + sfhGaString[0] + " for event with baseEntityId " + baseEntityId);
+                                    }
+                                    if (Objects.equals(obs.getFormSubmissionField(), "lmp_gest_age")) {
+                                        lmpGaString[0] = (String) obs.getValues().get(0);
+                                        logger.debug("found sfh_gest_age " + sfhGaString[0] + " for event with baseEntityId " + baseEntityId);
+                                    }
+
                                 });
 
                                 String selectedGaEddType = getObservationValueByFormSubmissionField(profileEvent, "select_gest_age_edd");
@@ -246,6 +274,8 @@ public class App {
 
                                         if (GuestAgeEddEnum.LMP.equals(selectedGaEddType)) {
                                             addGestationalAgeObservationToProfileEvent(profileEvent, lmpGestationalAge);
+                                            String openMrsGestAge = Utils.getFirstDigit(lmpGestationalAge);
+                                            contactVisitWithLstVisitDateMap.get(lookupKey);
                                             logger.debug("added gest_age obs based on select_gest_age_edd of LMP " + ob + " to Profile Event");
                                         }
 
@@ -258,7 +288,8 @@ public class App {
                                 if (ultrasoundDone[0] != null && !ultrasoundEddDateString[0].equals("0")) {
 
                                     String ultrasoundGestationalAge = Utils.calculateGaBasedOnUltrasoundEdd(ultrasoundEddDateString[0], manualEncounterDate[0]);
-
+                                    String openMrsGestAge = Utils.getFirstDigit(ultrasoundGestationalAge);
+                                    contactVisitWithLstVisitDateMap.get(lookupKey);
                                     if (!ultrasoundGestationalAge.equals("0")) {
 
                                         Obs ob = createOb(ultrasoundGestationalAge, "ultrasound_gest_age");
@@ -351,31 +382,31 @@ public class App {
                     logger.error(e.getMessage(), e);
                 }
 
-                if (json != null) {
-                    // Send JSON to HTTP endpoint using OkHtt
-
-                    RequestBody requestBody = RequestBody.create(json, MediaType.parse("application/json"));
-                    Request request1 = new Request.Builder()
-                            .url(url)
-                            .post(requestBody)
-                            .build();
-
-                    client.newCall(request1).enqueue(new Callback() {
-                        @Override
-                        public void onFailure(Call call, IOException e) {
-                            logger.error(e.getMessage(), e);
-                        }
-
-                        @Override
-                        public void onResponse(Call call, Response response) throws IOException {
-                            if (response.isSuccessful()) {
-                                logger.debug("Asynchronous chunk POST complete: Response: " + response.body().string());
-                            } else {
-                                logger.error("Asynchronous chunk POST complete:Post events failed with error code " + response.code());
-                            }
-                        }
-                    });
-                }
+//                if (json != null) {
+//                    // Send JSON to HTTP endpoint using OkHtt
+//
+//                    RequestBody requestBody = RequestBody.create(json, MediaType.parse("application/json"));
+//                    Request request1 = new Request.Builder()
+//                            .url(url)
+//                            .post(requestBody)
+//                            .build();
+//
+//                    client.newCall(request1).enqueue(new Callback() {
+//                        @Override
+//                        public void onFailure(Call call, IOException e) {
+//                            logger.error(e.getMessage(), e);
+//                        }
+//
+//                        @Override
+//                        public void onResponse(Call call, Response response) throws IOException {
+//                            if (response.isSuccessful()) {
+//                                logger.debug("Asynchronous chunk POST complete: Response: " + response.body().string());
+//                            } else {
+//                                logger.error("Asynchronous chunk POST complete:Post events failed with error code " + response.code());
+//                            }
+//                        }
+//                    });
+//                }
             }
 
         });

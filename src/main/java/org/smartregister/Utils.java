@@ -7,6 +7,9 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Utils {
     protected static final Logger logger = LogManager.getLogger();
@@ -78,6 +81,35 @@ public class Utils {
         long weeks = daysBetween / 7;
         long days = daysBetween % 7;
         return weeks + " weeks " + days + " days";
+    }
+
+    public static String getContactNumberFromDetailsMap(Map<String, String> details, String baseEntityId){
+        // Define the regular expression pattern to match digits
+
+
+        String number = getFirstDigit(details.get("Contact"));
+        if (!number.equals("0")) {
+            // Extract the matched number
+            return number;
+        } else {
+            logger.error("No number found for Contact visit event with baseEntityId "+baseEntityId);
+            return "0";
+        }
+
+    }
+
+    public static String getFirstDigit(String str){
+        Pattern pattern = Pattern.compile("\\d+");
+        Matcher matcher = pattern.matcher(str);
+
+        String number;
+        if (matcher.find()) {
+            // Extract the matched number
+            number = matcher.group();
+            return number;
+        } else {
+            return "0";
+        }
     }
 
 
