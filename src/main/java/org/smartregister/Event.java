@@ -9,7 +9,7 @@ import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Event {
-    @JsonIgnore
+    @JsonProperty
     private String eventId;
     @JsonProperty
     private Map<String, String> identifiers;
@@ -33,7 +33,7 @@ public class Event {
     private List<String> referrals;
 
     @JsonProperty
-    private long serverVersion;
+    private Long serverVersion;
     @JsonProperty
     private String category;
     @JsonProperty
@@ -90,11 +90,11 @@ public class Event {
     }
 
     @JsonProperty("serverVersion") // Include this during deserialization
-    public long getServerVersion() {
+    public Long getServerVersion() {
         return serverVersion;
     }
     @JsonProperty("serverVersion") // Include this during deserialization
-    public void setServerVersion(long serverVersion) {
+    public void setServerVersion(Long serverVersion) {
         this.serverVersion = serverVersion;
     }
 
